@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>잘린 고리의 열팽창 시뮬레이션</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2027;
+    --border: #2a3540;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #ff7b4a;
+    --accent-2: #58a6ff;
+    --original: #58a6ff;
+    --expanded: #ff7b4a;
+    --gap: #f7c948;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stage {
+    display: flex;
+    flex-direction: column;
+    min-height: 560px;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    flex: 1;
+    min-height: 480px;
+  }
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .swatch {
+    width: 18px; height: 3px; border-radius: 2px;
+  }
+  .swatch.dashed {
+    background: repeating-linear-gradient(to right, var(--original) 0 4px, transparent 4px 8px);
+    height: 2px;
+  }
+  .swatch.solid { background: var(--expanded); }
+  .swatch.gap { background: var(--gap); }
+
+  .controls h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .control {
+    margin-bottom: 14px;
+  }
+  .control label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .control label .value {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .control input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+
+  .measurements {
+    margin-top: 16px;
+  }
+  table.meas {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.meas th, table.meas td {
+    padding: 6px 8px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  table.meas th:first-child, table.meas td:first-child {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  table.meas th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .delta-pos { color: var(--accent); }
+  .delta-zero { color: var(--muted); }
+  .note {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 6px;
+    border-left: 2px solid var(--accent-2);
+  }
+  button.reset {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button.reset:hover { background: rgba(255,255,255,0.04); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="panel stage">
+    <h1>잘린 고리(Split Ring)의 열팽창 시뮬레이션</h1>
+    <div class="subtitle">선형 열팽창에서는 모든 길이가 같은 비율로 늘어납니다 — 틈도 함께 벌어집니다.</div>
+    <svg id="canvas" viewBox="-220 -220 440 440" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="legend">
+      <div class="item"><span class="swatch dashed"></span> 팽창 전 (기준)</div>
+      <div class="item"><span class="swatch solid"></span> 팽창 후</div>
+      <div class="item"><span class="swatch gap"></span> 틈 (gap)</div>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <h2>조절</h2>
+
+    <div class="control">
+      <label>바깥 지름 <span class="value"><span id="diameterVal">160</span> mm</span></label>
+      <input type="range" id="diameter" min="60" max="200" step="1" value="160" />
+    </div>
+
+    <div class="control">
+      <label>두께 (radial) <span class="value"><span id="thicknessVal">20</span> mm</span></label>
+      <input type="range" id="thickness" min="2" max="40" step="0.5" value="20" />
+    </div>
+
+    <div class="control">
+      <label>잘려나간 각도 <span class="value"><span id="gapAngleVal">30</span>°</span></label>
+      <input type="range" id="gapAngle" min="0" max="180" step="1" value="30" />
+    </div>
+
+    <div class="control">
+      <label>열팽창률 αΔT <span class="value"><span id="strainVal">5.00</span> %</span></label>
+      <input type="range" id="strain" min="0" max="30" step="0.1" value="5" />
+    </div>
+
+    <button class="reset" id="reset">기본값으로 재설정</button>
+
+    <div class="measurements">
+      <h2 style="margin-top:18px">측정값</h2>
+      <table class="meas">
+        <thead>
+          <tr><th>항목</th><th>팽창 전</th><th>팽창 후</th><th>변화</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>바깥 반지름 R</td><td id="Ro0">–</td><td id="Ro1">–</td><td id="RoD">–</td></tr>
+          <tr><td>안쪽 반지름 r</td><td id="Ri0">–</td><td id="Ri1">–</td><td id="RiD">–</td></tr>
+          <tr><td>두께 t = R−r</td><td id="T0">–</td><td id="T1">–</td><td id="TD">–</td></tr>
+          <tr><td>틈 간격 (현의 길이, 바깥쪽)</td><td id="G0">–</td><td id="G1">–</td><td id="GD">–</td></tr>
+          <tr><td>틈 호의 길이 (바깥쪽)</td><td id="A0">–</td><td id="A1">–</td><td id="AD">–</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>핵심:</b> 균일한 선형 열팽창에서는 모든 길이 차원이 동일한 인수 (1 + αΔT) 만큼 늘어납니다.
+        따라서 안쪽 반지름, 바깥 반지름, 두께, 틈 간격이 모두 같은 비율로 커집니다.
+        고리가 닫혀 있어도 가열되면 안쪽 구멍은 작아지지 않고 오히려 <b>커집니다</b>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const svg = document.getElementById('canvas');
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  const inputs = {
+    diameter:  document.getElementById('diameter'),
+    thickness: document.getElementById('thickness'),
+    gapAngle:  document.getElementById('gapAngle'),
+    strain:    document.getElementById('strain'),
+  };
+  const valEls = {
+    diameter:  document.getElementById('diameterVal'),
+    thickness: document.getElementById('thicknessVal'),
+    gapAngle:  document.getElementById('gapAngleVal'),
+    strain:    document.getElementById('strainVal'),
+  };
+
+  const defaults = { diameter: 160, thickness: 20, gapAngle: 30, strain: 5 };
+
+  document.getElementById('reset').addEventListener('click', () => {
+    for (const k in defaults) { inputs[k].value = defaults[k]; }
+    render();
+  });
+
+  Object.values(inputs).forEach(el => el.addEventListener('input', render));
+
+  // Build a "C-shaped" ring path:
+  //   outer arc (CCW) from angle a1 to a2 + line to inner radius
+  //   inner arc (CW) from a2 to a1 + close.
+  // gapAngle is the total angular size of the cut, centered on the +x axis (angle 0).
+  function ringPath(Ro, Ri, gapAngleDeg) {
+    const half = (gapAngleDeg * Math.PI / 180) / 2;
+    // start angle a1 = +half (upper edge of cut), end angle a2 = 2π - half (lower edge of cut)
+    // We draw CCW from a1 around to a2.
+    const a1 = half;
+    const a2 = 2 * Math.PI - half;
+    const sweepAngle = a2 - a1;
+    const largeArc = sweepAngle > Math.PI ? 1 : 0;
+
+    // SVG: y is flipped (down positive). We'll use math coords and negate y.
+    const p = (r, a) => ({ x: r * Math.cos(a), y: -r * Math.sin(a) });
+
+    const p1 = p(Ro, a1);
+    const p2 = p(Ro, a2);
+    const p3 = p(Ri, a2);
+    const p4 = p(Ri, a1);
+
+    // Outer arc: from p1 to p2, sweep=0 (CCW in math = sweep=0 in SVG because y is flipped — actually:
+    // In SVG y-down coord system, sweep-flag=1 draws clockwise; since we negate y, math CCW becomes SVG CW visually,
+    // which means sweep-flag=1.
+    // Let's just say: outer arc sweep=1, inner arc sweep=0.
+    return [
+      `M ${p1.x.toFixed(3)} ${p1.y.toFixed(3)}`,
+      `A ${Ro} ${Ro} 0 ${largeArc} 1 ${p2.x.toFixed(3)} ${p2.y.toFixed(3)}`,
+      `L ${p3.x.toFixed(3)} ${p3.y.toFixed(3)}`,
+      `A ${Ri} ${Ri} 0 ${largeArc} 0 ${p4.x.toFixed(3)} ${p4.y.toFixed(3)}`,
+      'Z'
+    ].join(' ');
+  }
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function fmt(v, d = 2) { return v.toFixed(d); }
+
+  function render() {
+    const D  = +inputs.diameter.value;
+    const t  = +inputs.thickness.value;
+    const ga = +inputs.gapAngle.value;
+    const eps = +inputs.strain.value / 100;
+
+    valEls.diameter.textContent  = D;
+    valEls.thickness.textContent = t;
+    valEls.gapAngle.textContent  = ga;
+    valEls.strain.textContent    = (+inputs.strain.value).toFixed(2);
+
+    // Original dimensions
+    const Ro0 = D / 2;
+    const Ri0 = Math.max(0.1, Ro0 - t);
+    const t0  = Ro0 - Ri0;
+
+    // Expanded: every linear dimension scales by (1 + eps).
+    // Gap angle is dimensionless and unchanged.
+    const k = 1 + eps;
+    const Ro1 = Ro0 * k;
+    const Ri1 = Ri0 * k;
+    const t1  = t0  * k;
+
+    // Gap chord length at outer radius (between the two outer corners of the cut).
+    // Chord = 2 R sin(θ/2) where θ is gap angle.
+    const gapRad = ga * Math.PI / 180;
+    const chord0 = 2 * Ro0 * Math.sin(gapRad / 2);
+    const chord1 = 2 * Ro1 * Math.sin(gapRad / 2);
+    const arc0   = Ro0 * gapRad;
+    const arc1   = Ro1 * gapRad;
+
+    // ---- Render SVG ----
+    // Choose a viewBox that fits the expanded ring with some margin.
+    const maxR = Ro1 * 1.18 + 40;
+    svg.setAttribute('viewBox', `${-maxR} ${-maxR} ${2*maxR} ${2*maxR}`);
+
+    // Clear
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // Background subtle grid (axes)
+    const axesGroup = el('g', { stroke: '#2a3540', 'stroke-width': '0.5' });
+    axesGroup.appendChild(el('line', { x1: -maxR, y1: 0, x2: maxR, y2: 0 }));
+    axesGroup.appendChild(el('line', { x1: 0, y1: -maxR, x2: 0, y2: maxR }));
+    svg.appendChild(axesGroup);
+
+    // Expanded ring (filled, behind)
+    if (ga >= 359.5) {
+      // Effectively no ring — show nothing
+    } else if (ga <= 0.01) {
+      // Full ring (no gap) — draw donut using even-odd
+      const expGroup = el('g', {});
+      expGroup.appendChild(el('circle', {
+        cx: 0, cy: 0, r: Ro1,
+        fill: 'rgba(255,123,74,0.18)',
+        stroke: '#ff7b4a', 'stroke-width': '1.5'
+      }));
+      expGroup.appendChild(el('circle', {
+        cx: 0, cy: 0, r: Ri1,
+        fill: '#1a2027',
+        stroke: '#ff7b4a', 'stroke-width': '1.5'
+      }));
+      svg.appendChild(expGroup);
+
+      // Original outline (dashed circles)
+      const oGroup = el('g', {
+        fill: 'none', stroke: '#58a6ff',
+        'stroke-width': '1.2', 'stroke-dasharray': '4 3'
+      });
+      oGroup.appendChild(el('circle', { cx: 0, cy: 0, r: Ro0 }));
+      oGroup.appendChild(el('circle', { cx: 0, cy: 0, r: Ri0 }));
+      svg.appendChild(oGroup);
+    } else {
+      // Expanded ring path
+      svg.appendChild(el('path', {
+        d: ringPath(Ro1, Ri1, ga),
+        fill: 'rgba(255,123,74,0.18)',
+        stroke: '#ff7b4a',
+        'stroke-width': '1.5',
+        'stroke-linejoin': 'round'
+      }));
+
+      // Original ring outline (dashed)
+      svg.appendChild(el('path', {
+        d: ringPath(Ro0, Ri0, ga),
+        fill: 'none',
+        stroke: '#58a6ff',
+        'stroke-width': '1.2',
+        'stroke-dasharray': '4 3',
+        'stroke-linejoin': 'round'
+      }));
+
+      // Highlight gap: draw the two chords (outer original vs expanded) on the +x side
+      const half = (gapRad / 2);
+      const px = (r, a) => [r * Math.cos(a), -r * Math.sin(a)];
+      const [a0x, a0y] = px(Ro0, half);
+      const [b0x, b0y] = px(Ro0, -half);
+      const [a1x, a1y] = px(Ro1, half);
+      const [b1x, b1y] = px(Ro1, -half);
+
+      // Chord lines (the visual "gap" opening across the cut, outer edge)
+      const gapG = el('g', { stroke: '#f7c948', 'stroke-width': '1.5', 'stroke-linecap': 'round' });
+      gapG.appendChild(el('line', { x1: a0x, y1: a0y, x2: b0x, y2: b0y, 'stroke-dasharray': '4 3', opacity: '0.7' }));
+      gapG.appendChild(el('line', { x1: a1x, y1: a1y, x2: b1x, y2: b1y }));
+      svg.appendChild(gapG);
+
+      // Small labels for gap
+      const labelOffset = Ro1 + 14;
+      const gapLabel = el('text', {
+        x: labelOffset, y: 4,
+        fill: '#f7c948', 'font-size': '11', 'font-family': 'sans-serif'
+      });
+      gapLabel.textContent = `틈 ${fmt(chord1,1)} mm`;
+      svg.appendChild(gapLabel);
+    }
+
+    // Radial reference: small dimension lines at top showing R and r
+    {
+      const refG = el('g', {
+        stroke: '#8b949e', 'stroke-width': '0.6', fill: '#8b949e',
+        'font-size': '10', 'font-family': 'sans-serif'
+      });
+      // Outer radius arrow (up direction)
+      refG.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: -Ro1 }));
+      const tR = el('text', { x: 4, y: -Ro1 + 12, fill: '#ff7b4a' });
+      tR.textContent = `R = ${fmt(Ro1,1)}`;
+      refG.appendChild(tR);
+
+      const tr = el('text', { x: 4, y: -Ri1 - 4, fill: '#ff7b4a' });
+      tr.textContent = `r = ${fmt(Ri1,1)}`;
+      refG.appendChild(tr);
+
+      svg.appendChild(refG);
+    }
+
+    // ---- Update measurement table ----
+    const setCell = (id, v, suffix = ' mm') => {
+      document.getElementById(id).textContent = fmt(v, 2) + suffix;
+    };
+    const setDelta = (id, v0, v1) => {
+      const d = v1 - v0;
+      const pct = v0 === 0 ? 0 : (d / v0) * 100;
+      const el = document.getElementById(id);
+      el.textContent = `${d >= 0 ? '+' : ''}${fmt(d,2)} mm  (${d >= 0 ? '+' : ''}${fmt(pct,2)} %)`;
+      el.className = Math.abs(d) < 1e-6 ? 'delta-zero' : 'delta-pos';
+    };
+
+    setCell('Ro0', Ro0); setCell('Ro1', Ro1); setDelta('RoD', Ro0, Ro1);
+    setCell('Ri0', Ri0); setCell('Ri1', Ri1); setDelta('RiD', Ri0, Ri1);
+    setCell('T0',  t0 ); setCell('T1',  t1 ); setDelta('TD',  t0,  t1 );
+    setCell('G0',  chord0); setCell('G1', chord1); setDelta('GD', chord0, chord1);
+    setCell('A0',  arc0);   setCell('A1', arc1);   setDelta('AD', arc0,   arc1);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
