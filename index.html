@@ -51,19 +51,30 @@
     padding: 16px;
   }
   .stage {
-    display: flex;
-    flex-direction: column;
+    display: block;
   }
   .svg-wrap {
+    position: relative;
     width: 100%;
-    max-width: 620px;
-    margin: 0 auto;
-    aspect-ratio: 1 / 1;
+    max-width: 540px;
+    margin-left: auto;
+    margin-right: auto;
   }
-  svg {
+  /* Padding-bottom trick guarantees a square box in every browser, even
+     where aspect-ratio interacts badly with flex sizing. */
+  .svg-wrap::before {
+    content: '';
+    display: block;
+    padding-top: 100%;
+  }
+  .svg-wrap > svg {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     display: block;
+    overflow: visible;
   }
   .legend {
     display: flex;
@@ -503,27 +514,25 @@
     const arc0   = Ro0 * gapRad;
     const arc1   = Ro1 * gapRad;
 
-    // ---- Set viewBox to be a square centered on the origin, sized to the
-    //      largest of the original or expanded ring with comfortable margin.
-    //      Use the max-possible expanded radius (target strain, not current)
-    //      so the viewBox doesn't change mid-animation.
-    const Ro_max = Ro0 * (1 + targetStrain());
-    const viewExtent = Ro_max * 1.15 + 8;
+    // ---- ViewBox: square, sized to the target-strain ring with margin.
+    //      Shift its center so the *visible* C-shape (gap on +x removes
+    //      material) is centered in the viewport, not the geometric axis.
+    //      The C-shape's outer x bounds are [-Ro, +Ro·cos(θ/2)], so its
+    //      bounding-box center sits at Ro·(cos(θ/2)−1)/2 — negative
+    //      whenever there is a gap. We shift the viewBox by exactly that
+    //      amount so the material is centered.
+    //      We pin the shift to the target strain so the viewBox does not
+    //      pan during the play animation.
+    const Ro_target = Ro0 * (1 + targetStrain());
+    const halfTheta = ga * Math.PI / 360;
+    const cosHalf   = Math.cos(halfTheta);
+    const centerX   = Ro_target * (cosHalf - 1) / 2;
+    const viewExtent = Ro_target * 1.18 + 8;
     svg.setAttribute('viewBox',
-      `${-viewExtent} ${-viewExtent} ${2*viewExtent} ${2*viewExtent}`);
+      `${centerX - viewExtent} ${-viewExtent} ${2*viewExtent} ${2*viewExtent}`);
 
     // Clear
     while (svg.firstChild) svg.removeChild(svg.firstChild);
-
-    // Subtle axes
-    const axesGroup = el('g', { stroke: '#2a3540', 'stroke-width': '0.4' });
-    axesGroup.appendChild(el('line', {
-      x1: -viewExtent, y1: 0, x2: viewExtent, y2: 0
-    }));
-    axesGroup.appendChild(el('line', {
-      x1: 0, y1: -viewExtent, x2: 0, y2: viewExtent
-    }));
-    svg.appendChild(axesGroup);
 
     if (ga >= 359.5) {
       // Effectively nothing left; render nothing.
