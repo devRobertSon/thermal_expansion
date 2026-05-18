@@ -50,39 +50,26 @@
     border-radius: 10px;
     padding: 16px;
   }
+
+  /* Stage: flex column whose only job is to center the canvas horizontally. */
   .stage {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
-  .svg-center {
-    display: block;
-    text-align: center;
-    width: 100%;
-    overflow: hidden;
-    font-size: 0;
+  .stage > h1,
+  .stage > .subtitle,
+  .stage > .legend {
+    align-self: stretch;
   }
-  .svg-wrap {
-    display: inline-block;
-    width: 500px;
+  #canvas {
+    display: block;
+    width: 480px;
+    height: 480px;
     max-width: 100%;
-    position: relative;
-    vertical-align: top;
-    font-size: initial;
+    margin: 8px 0;
   }
-  /* Padding-bottom 100% guarantees a square box without relying on
-     aspect-ratio (some browsers compute it oddly inside flex/grid). */
-  .svg-wrap::before {
-    content: '';
-    display: block;
-    padding-top: 100%;
-  }
-  .svg-wrap > svg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-    overflow: visible;
-  }
+
   .legend {
     display: flex;
     gap: 16px;
@@ -111,9 +98,7 @@
     margin: 0 0 12px;
     font-weight: 600;
   }
-  .control {
-    margin-bottom: 14px;
-  }
+  .control { margin-bottom: 14px; }
   .control label {
     display: flex;
     justify-content: space-between;
@@ -211,9 +196,7 @@
   }
   button.reset:hover { background: rgba(255,255,255,0.04); }
 
-  .measurements {
-    margin-top: 16px;
-  }
+  .measurements { margin-top: 16px; }
   table.meas {
     width: 100%;
     border-collapse: collapse;
@@ -256,11 +239,7 @@
   <div class="panel stage">
     <h1>잘린 고리(Split Ring)의 열팽창 시뮬레이션</h1>
     <div class="subtitle">선형 열팽창에서는 모든 길이가 같은 비율로 늘어납니다 — 틈도 함께 벌어집니다.</div>
-    <div class="svg-center">
-      <div class="svg-wrap">
-        <svg id="canvas" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet"></svg>
-      </div>
-    </div>
+    <canvas id="canvas"></canvas>
     <div class="legend">
       <div class="item"><span class="swatch dashed"></span> 팽창 전 (기준)</div>
       <div class="item"><span class="swatch solid"></span> 팽창 후</div>
@@ -332,8 +311,16 @@
 
 <script>
 (function() {
-  const svg = document.getElementById('canvas');
-  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const canvas = document.getElementById('canvas');
+  const SIZE = 480; // CSS pixel size (square)
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = SIZE * dpr;
+  canvas.height = SIZE * dpr;
+  canvas.style.width  = SIZE + 'px';
+  canvas.style.height = SIZE + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  // Now drawing in CSS-px coordinates (0..SIZE).
 
   const inputs = {
     diameter:  document.getElementById('diameter'),
@@ -348,8 +335,7 @@
     strain:    document.getElementById('strainVal'),
   };
   const currentStrainEl = document.getElementById('currentStrainVal');
-  const progressBar = document.getElementById('progressBar');
-
+  const progressBar     = document.getElementById('progressBar');
   const btnPlay    = document.getElementById('btnPlay');
   const btnPause   = document.getElementById('btnPause');
   const btnStop    = document.getElementById('btnStop');
@@ -357,36 +343,31 @@
 
   const defaults = { diameter: 160, thickness: 20, gapAngle: 30, strain: 5 };
 
-  // ----- Animation state -----
-  // mode: 'manual' (slider directly controls), 'playing', 'paused'
-  let mode = 'manual';
-  let currentStrain = +inputs.strain.value / 100; // displayed strain (0..1)
+  // ------- Animation state machine -------
+  let mode = 'manual'; // 'manual' | 'playing' | 'paused'
+  let currentStrain = +inputs.strain.value / 100;
   let animStartTime = 0;
   let animStartStrain = 0;
-  const ANIM_DURATION = 3000; // ms to go from 0 to slider value
+  const ANIM_DURATION = 3000;
 
   function targetStrain() { return +inputs.strain.value / 100; }
 
   function setMode(m) {
     mode = m;
-    btnPlay.classList.toggle('active',    mode === 'playing');
-    btnPause.classList.toggle('active',   mode === 'paused');
+    btnPlay.classList.toggle('active',  mode === 'playing');
+    btnPause.classList.toggle('active', mode === 'paused');
     btnPause.disabled = mode !== 'playing';
   }
-
   function easeInOutQuad(t) {
     return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;
   }
-
   function tick() {
     if (mode !== 'playing') return;
-    const now = performance.now();
-    const elapsed = now - animStartTime;
-    const fraction = Math.min(1, elapsed / ANIM_DURATION);
-    const eased = easeInOutQuad(fraction);
-    currentStrain = animStartStrain + (targetStrain() - animStartStrain) * eased;
+    const elapsed = performance.now() - animStartTime;
+    const f = Math.min(1, elapsed / ANIM_DURATION);
+    currentStrain = animStartStrain + (targetStrain() - animStartStrain) * easeInOutQuad(f);
     render();
-    if (fraction >= 1) {
+    if (f >= 1) {
       currentStrain = targetStrain();
       setMode('paused');
       render();
@@ -394,32 +375,15 @@
       requestAnimationFrame(tick);
     }
   }
-
   function play() {
-    // If already at the target (within tolerance) and paused, restart from 0.
-    if (mode === 'paused' && Math.abs(currentStrain - targetStrain()) < 1e-6) {
-      currentStrain = 0;
-    }
-    // If in manual at the target, also restart from 0 for visible animation.
-    if (mode === 'manual' && Math.abs(currentStrain - targetStrain()) < 1e-6) {
-      currentStrain = 0;
-    }
+    if (Math.abs(currentStrain - targetStrain()) < 1e-6) currentStrain = 0;
     animStartStrain = currentStrain;
     animStartTime = performance.now();
     setMode('playing');
     requestAnimationFrame(tick);
   }
-
-  function pause() {
-    if (mode === 'playing') setMode('paused');
-  }
-
-  function stop() {
-    currentStrain = 0;
-    setMode('manual');
-    render();
-  }
-
+  function pause()   { if (mode === 'playing') setMode('paused'); }
+  function stop()    { currentStrain = 0; setMode('manual'); render(); }
   function restart() {
     currentStrain = 0;
     animStartStrain = 0;
@@ -427,67 +391,120 @@
     setMode('playing');
     requestAnimationFrame(tick);
   }
-
-  btnPlay.addEventListener('click', play);
-  btnPause.addEventListener('click', pause);
-  btnStop.addEventListener('click', stop);
+  btnPlay   .addEventListener('click', play);
+  btnPause  .addEventListener('click', pause);
+  btnStop   .addEventListener('click', stop);
   btnRestart.addEventListener('click', restart);
-
   document.getElementById('reset').addEventListener('click', () => {
-    for (const k in defaults) { inputs[k].value = defaults[k]; }
+    for (const k in defaults) inputs[k].value = defaults[k];
     currentStrain = defaults.strain / 100;
     setMode('manual');
     render();
   });
-
-  // Slider input handler
   Object.entries(inputs).forEach(([key, el]) => {
     el.addEventListener('input', () => {
       if (key === 'strain') {
         if (mode === 'manual') {
           currentStrain = targetStrain();
         } else if (mode === 'playing') {
-          // Re-anchor animation: continue from current point toward new target.
           animStartStrain = currentStrain;
           animStartTime = performance.now();
         }
-        // If paused: leave currentStrain alone; pressing play resumes toward new target.
       }
       render();
     });
   });
 
-  // ----- Geometry -----
-  function ringPath(Ro, Ri, gapAngleDeg) {
-    const half = (gapAngleDeg * Math.PI / 180) / 2;
-    const a1 = half;
-    const a2 = 2 * Math.PI - half;
-    const sweepAngle = a2 - a1;
-    const largeArc = sweepAngle > Math.PI ? 1 : 0;
-
-    // Math coords with y flipped for SVG screen.
-    const p = (r, a) => ({ x: r * Math.cos(a), y: -r * Math.sin(a) });
-    const p1 = p(Ro, a1);
-    const p2 = p(Ro, a2);
-    const p3 = p(Ri, a2);
-    const p4 = p(Ri, a1);
-
-    return [
-      `M ${p1.x.toFixed(3)} ${p1.y.toFixed(3)}`,
-      `A ${Ro} ${Ro} 0 ${largeArc} 1 ${p2.x.toFixed(3)} ${p2.y.toFixed(3)}`,
-      `L ${p3.x.toFixed(3)} ${p3.y.toFixed(3)}`,
-      `A ${Ri} ${Ri} 0 ${largeArc} 0 ${p4.x.toFixed(3)} ${p4.y.toFixed(3)}`,
-      'Z'
-    ].join(' ');
+  // ------- Canvas drawing -------
+  //
+  // The split ring's gap is centered on the +x axis. Material occupies the
+  // angular range [+half, 2π - half] in math-angle terms. In canvas's
+  // y-down system the visual is mirrored top↔bottom, but because the gap
+  // is symmetric about ±x this looks identical either way.
+  //
+  // Both arcs use ctx.arc(0, 0, ...) — the same explicit center — so the
+  // outer and inner arcs are guaranteed concentric. (This is the property
+  // that the previous SVG path implementation failed to maintain.)
+  function ringSubpath(ri, ro, gapDeg) {
+    const half = gapDeg * Math.PI / 360;
+    ctx.beginPath();
+    if (gapDeg <= 0.01) {
+      // Closed ring: outer CCW, inner CW (even-odd / non-zero hole).
+      ctx.arc(0, 0, ro, 0, 2 * Math.PI, false);
+      ctx.moveTo(ri, 0);
+      ctx.arc(0, 0, ri, 0, 2 * Math.PI, true);
+      return true;
+    }
+    if (gapDeg >= 359.99) return false;
+    // Outer arc: from +half to 2π-half, "clockwise" in canvas terms
+    // (counterclockwise=false) → that is the LONG arc going around the -x
+    // side (the material side). Both endpoints are on the +x side.
+    ctx.arc(0, 0, ro,   half, 2 * Math.PI - half, false);
+    // Inner arc: from 2π-half back to +half, "counterclockwise" — also the
+    // LONG way around the -x side, on the same center.
+    ctx.arc(0, 0, ri, 2 * Math.PI - half,         half, true);
+    ctx.closePath();
+    return true;
   }
 
-  function el(tag, attrs) {
-    const e = document.createElementNS(SVG_NS, tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    return e;
+  function drawRing(ri, ro, gapDeg, scale, style) {
+    if (!ringSubpath(ri, ro, gapDeg)) return;
+    if (style.fill) {
+      ctx.fillStyle = style.fill;
+      ctx.fill('evenodd');
+    }
+    ctx.setLineDash(style.dashed ? [4 / scale, 3 / scale] : []);
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = (style.lineWidth || 1.4) / scale;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  function drawGapChords(Ro0v, Ro1v, gapDeg, scale) {
+    if (gapDeg <= 0.01 || gapDeg >= 359.99) return;
+    const half = gapDeg * Math.PI / 360;
+    const cosH = Math.cos(half);
+    const sinH = Math.sin(half);
+    const ax = Ro0v * cosH, ay = Ro0v * sinH;   // outer-lower cut, original
+    const bx = Ro0v * cosH, by = -Ro0v * sinH;  // outer-upper cut, original
+    const cx = Ro1v * cosH, cy = Ro1v * sinH;   // outer-lower cut, expanded
+    const dx = Ro1v * cosH, dy = -Ro1v * sinH;  // outer-upper cut, expanded
+
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#f7c948';
+    ctx.lineWidth = 1.6 / scale;
+
+    // Original chord (dashed, faint)
+    ctx.globalAlpha = 0.7;
+    ctx.setLineDash([4 / scale, 3 / scale]);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    // Expanded chord (solid)
+    ctx.globalAlpha = 1.0;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(dx, dy);
+    ctx.stroke();
+
+    ctx.lineCap = 'butt';
   }
 
   function fmt(v, d = 2) { return v.toFixed(d); }
+  function setCell(id, v) {
+    document.getElementById(id).textContent = fmt(v, 2) + ' mm';
+  }
+  function setDelta(id, v0, v1) {
+    const d = v1 - v0;
+    const pct = v0 === 0 ? 0 : (d / v0) * 100;
+    const node = document.getElementById(id);
+    node.textContent =
+      `${d >= 0 ? '+' : ''}${fmt(d, 2)} mm  (${d >= 0 ? '+' : ''}${fmt(pct, 2)} %)`;
+    node.className = Math.abs(d) < 1e-6 ? 'delta-zero' : 'delta-pos';
+  }
 
   function render() {
     const D  = +inputs.diameter.value;
@@ -498,125 +515,57 @@
     valEls.thickness.textContent = t;
     valEls.gapAngle.textContent  = ga;
     valEls.strain.textContent    = (+inputs.strain.value).toFixed(2);
+    currentStrainEl.textContent  = (currentStrain * 100).toFixed(2);
 
-    // Current animation readout
-    currentStrainEl.textContent = (currentStrain * 100).toFixed(2);
     const targetPct = Math.max(0.01, +inputs.strain.value);
-    const progressPct = Math.min(100, (currentStrain * 100 / targetPct) * 100);
-    progressBar.style.width = progressPct + '%';
+    progressBar.style.width =
+      Math.min(100, (currentStrain * 100 / targetPct) * 100) + '%';
 
-    // Original (reference) dimensions
-    const Ro0 = D / 2;
-    const Ri0 = Math.max(0.1, Ro0 - t);
-    const t0  = Ro0 - Ri0;
+    const Ro0v = D / 2;
+    const Ri0v = Math.max(0.1, Ro0v - t);
+    const t0   = Ro0v - Ri0v;
+    const k    = 1 + currentStrain;
+    const Ro1v = Ro0v * k;
+    const Ri1v = Ri0v * k;
+    const t1   = t0 * k;
 
-    // Current (animated) dimensions
-    const k = 1 + currentStrain;
-    const Ro1 = Ro0 * k;
-    const Ri1 = Ri0 * k;
-    const t1  = t0  * k;
-
-    // Gap chord length at outer radius. Gap angle is dimensionless and unchanged.
     const gapRad = ga * Math.PI / 180;
-    const chord0 = 2 * Ro0 * Math.sin(gapRad / 2);
-    const chord1 = 2 * Ro1 * Math.sin(gapRad / 2);
-    const arc0   = Ro0 * gapRad;
-    const arc1   = Ro1 * gapRad;
+    const chord0 = 2 * Ro0v * Math.sin(gapRad / 2);
+    const chord1 = 2 * Ro1v * Math.sin(gapRad / 2);
+    const arc0   = Ro0v * gapRad;
+    const arc1   = Ro1v * gapRad;
 
-    // ---- ViewBox: square, centered on the ring's geometric origin (0,0),
-    //      sized to the target-strain ring with comfortable margin so the
-    //      view does not pan during the play animation.
-    const Ro_target = Ro0 * (1 + targetStrain());
-    const viewExtent = Ro_target * 1.2 + 10;
-    svg.setAttribute('viewBox',
-      `${-viewExtent} ${-viewExtent} ${2*viewExtent} ${2*viewExtent}`);
+    // ------- Draw -------
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.translate(SIZE / 2, SIZE / 2);
 
-    // Clear
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    // Fit the *target*-strain ring inside ~85% of half the canvas so the
+    // viewport does not pan during the play animation.
+    const Ro_target = Ro0v * (1 + targetStrain());
+    const scale = (SIZE / 2) * 0.88 / (Ro_target + 2);
+    ctx.scale(scale, scale);
 
-    if (ga >= 359.5) {
-      // Effectively nothing left; render nothing.
-    } else if (ga <= 0.01) {
-      // Full closed ring (no gap) - donut from two circles.
-      const expGroup = el('g', {});
-      expGroup.appendChild(el('circle', {
-        cx: 0, cy: 0, r: Ro1,
-        fill: 'rgba(255,123,74,0.18)',
-        stroke: '#ff7b4a', 'stroke-width': '1.5'
-      }));
-      expGroup.appendChild(el('circle', {
-        cx: 0, cy: 0, r: Ri1,
-        fill: '#1a2027',
-        stroke: '#ff7b4a', 'stroke-width': '1.5'
-      }));
-      svg.appendChild(expGroup);
+    drawRing(Ri1v, Ro1v, ga, scale, {
+      fill: 'rgba(255,123,74,0.18)',
+      stroke: '#ff7b4a',
+      lineWidth: 1.6,
+    });
+    drawRing(Ri0v, Ro0v, ga, scale, {
+      stroke: '#58a6ff',
+      dashed: true,
+      lineWidth: 1.4,
+    });
+    drawGapChords(Ro0v, Ro1v, ga, scale);
 
-      const oGroup = el('g', {
-        fill: 'none', stroke: '#58a6ff',
-        'stroke-width': '1.2', 'stroke-dasharray': '4 3'
-      });
-      oGroup.appendChild(el('circle', { cx: 0, cy: 0, r: Ro0 }));
-      oGroup.appendChild(el('circle', { cx: 0, cy: 0, r: Ri0 }));
-      svg.appendChild(oGroup);
-    } else {
-      // Expanded ring (solid fill)
-      svg.appendChild(el('path', {
-        d: ringPath(Ro1, Ri1, ga),
-        fill: 'rgba(255,123,74,0.18)',
-        stroke: '#ff7b4a',
-        'stroke-width': '1.5',
-        'stroke-linejoin': 'round'
-      }));
+    ctx.restore();
 
-      // Original ring outline (dashed)
-      svg.appendChild(el('path', {
-        d: ringPath(Ro0, Ri0, ga),
-        fill: 'none',
-        stroke: '#58a6ff',
-        'stroke-width': '1.2',
-        'stroke-dasharray': '4 3',
-        'stroke-linejoin': 'round'
-      }));
-
-      // Gap chords (outer original vs expanded) at +x side
-      const half = gapRad / 2;
-      const px = (r, a) => [r * Math.cos(a), -r * Math.sin(a)];
-      const [a0x, a0y] = px(Ro0, half);
-      const [b0x, b0y] = px(Ro0, -half);
-      const [a1x, a1y] = px(Ro1, half);
-      const [b1x, b1y] = px(Ro1, -half);
-
-      const gapG = el('g', {
-        stroke: '#f7c948', 'stroke-width': '1.5', 'stroke-linecap': 'round'
-      });
-      gapG.appendChild(el('line', {
-        x1: a0x, y1: a0y, x2: b0x, y2: b0y,
-        'stroke-dasharray': '4 3', opacity: '0.7'
-      }));
-      gapG.appendChild(el('line', {
-        x1: a1x, y1: a1y, x2: b1x, y2: b1y
-      }));
-      svg.appendChild(gapG);
-    }
-
-    // ---- Update measurement table ----
-    const setCell = (id, v) => {
-      document.getElementById(id).textContent = fmt(v, 2) + ' mm';
-    };
-    const setDelta = (id, v0, v1) => {
-      const d = v1 - v0;
-      const pct = v0 === 0 ? 0 : (d / v0) * 100;
-      const node = document.getElementById(id);
-      node.textContent =
-        `${d >= 0 ? '+' : ''}${fmt(d, 2)} mm  (${d >= 0 ? '+' : ''}${fmt(pct, 2)} %)`;
-      node.className = Math.abs(d) < 1e-6 ? 'delta-zero' : 'delta-pos';
-    };
-
-    setCell('Ro0', Ro0); setCell('Ro1', Ro1); setDelta('RoD', Ro0, Ro1);
-    setCell('Ri0', Ri0); setCell('Ri1', Ri1); setDelta('RiD', Ri0, Ri1);
-    setCell('T0',  t0 ); setCell('T1',  t1 ); setDelta('TD',  t0,  t1 );
+    // ------- Measurements table -------
+    setCell('Ro0', Ro0v); setCell('Ro1', Ro1v); setDelta('RoD', Ro0v, Ro1v);
+    setCell('Ri0', Ri0v); setCell('Ri1', Ri1v); setDelta('RiD', Ri0v, Ri1v);
+    setCell('T0',  t0  ); setCell('T1',  t1  ); setDelta('TD',  t0,   t1  );
     setCell('G0',  chord0); setCell('G1', chord1); setDelta('GD', chord0, chord1);
-    setCell('A0',  arc0);   setCell('A1', arc1);   setDelta('AD', arc0,   arc1);
+    setCell('A0',  arc0  ); setCell('A1', arc1  ); setDelta('AD', arc0,   arc1  );
   }
 
   setMode('manual');
