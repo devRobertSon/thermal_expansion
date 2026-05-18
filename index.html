@@ -540,10 +540,12 @@
     ctx.save();
     ctx.translate(SIZE / 2, SIZE / 2);
 
-    // Fit the *target*-strain ring inside ~85% of half the canvas so the
-    // viewport does not pan during the play animation.
-    const Ro_target = Ro0v * (1 + targetStrain());
-    const scale = (SIZE / 2) * 0.88 / (Ro_target + 2);
+    // Fit the canvas to the *maximum possible* expanded ring (slider's max
+    // target strain), so the original (pre-expansion) outline is anchored
+    // at a fixed screen size and the expanded ring grows visibly outward
+    // from it as currentStrain increases.
+    const MAX_STRAIN = (+inputs.strain.max) / 100;
+    const scale = (SIZE / 2) * 0.85 / (Ro0v * (1 + MAX_STRAIN));
     ctx.scale(scale, scale);
 
     drawRing(Ri1v, Ro1v, ga, scale, {
