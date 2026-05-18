@@ -54,26 +54,26 @@
     display: block;
   }
   .svg-center {
-    display: flex;
-    justify-content: center;
+    display: block;
+    text-align: center;
     width: 100%;
-    max-width: 100%;
     overflow: hidden;
+    font-size: 0;
   }
   .svg-wrap {
+    display: inline-block;
     width: 500px;
     max-width: 100%;
-    aspect-ratio: 1 / 1;
     position: relative;
-    flex-shrink: 1;
+    vertical-align: top;
+    font-size: initial;
   }
-  /* Padding-bottom fallback for browsers without aspect-ratio support. */
-  @supports not (aspect-ratio: 1 / 1) {
-    .svg-wrap::before {
-      content: '';
-      display: block;
-      padding-top: 100%;
-    }
+  /* Padding-bottom 100% guarantees a square box without relying on
+     aspect-ratio (some browsers compute it oddly inside flex/grid). */
+  .svg-wrap::before {
+    content: '';
+    display: block;
+    padding-top: 100%;
   }
   .svg-wrap > svg {
     position: absolute;
