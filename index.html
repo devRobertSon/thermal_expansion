@@ -51,17 +51,23 @@
     padding: 16px;
   }
   .stage {
+    display: block;
+  }
+  .svg-center {
     display: flex;
-    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
   .svg-wrap {
-    align-self: center;
-    width: 100%;
-    max-width: 520px;
+    width: 500px;
+    max-width: 100%;
     aspect-ratio: 1 / 1;
     position: relative;
+    flex-shrink: 1;
   }
-  /* Padding-bottom fallback for browsers without aspect-ratio. */
+  /* Padding-bottom fallback for browsers without aspect-ratio support. */
   @supports not (aspect-ratio: 1 / 1) {
     .svg-wrap::before {
       content: '';
@@ -250,8 +256,10 @@
   <div class="panel stage">
     <h1>잘린 고리(Split Ring)의 열팽창 시뮬레이션</h1>
     <div class="subtitle">선형 열팽창에서는 모든 길이가 같은 비율로 늘어납니다 — 틈도 함께 벌어집니다.</div>
-    <div class="svg-wrap">
-      <svg id="canvas" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="svg-center">
+      <div class="svg-wrap">
+        <svg id="canvas" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
     </div>
     <div class="legend">
       <div class="item"><span class="swatch dashed"></span> 팽창 전 (기준)</div>
